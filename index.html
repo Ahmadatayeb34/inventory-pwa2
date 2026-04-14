@@ -1306,6 +1306,7 @@
     // ── حالة فلاتر الصلاحية ──
     let expiryDateFilter = 'all';     // 'all' | 'has' | 'none'
     let expiryCategoryFilter = 'all'; // 'all' | 'expired' | 'critical' | 'warning' | 'medium' | 'safe'
+    let filteredExpiryRows = [];      // الصفوف المعروضة حالياً في جدول الصلاحيات (نفسها تُصدَّر)
 
     function init() {
         loadTracking();
@@ -2169,6 +2170,9 @@
         // ترتيب: الأقرب انتهاءً أولاً، الأصناف بلا تاريخ في الآخر
         allRows.sort((a, b) => a.sortDate - b.sortDate);
 
+        // حفظ الصفوف المفلترة للتصدير (ما يراه المستخدم = ما يُصدَّر)
+        filteredExpiryRows = allRows;
+
         allRows.forEach(({ item, idx, batch }) => {
             const tr = document.createElement('tr');
             tr.className = `cursor-pointer transition border-b border-slate-50 ${idx === selectedItemIdx ? 'bg-amber-100' : ''}`;
@@ -2678,53 +2682,46 @@
     }
 
     function exportExpiryData() {
+        // استخدام الصفوف المعروضة حالياً (حسب الفلتر النشط)
+        const source = filteredExpiryRows.length > 0 ? filteredExpiryRows : [];
+
+        if (source.length === 0) {
+            showToast('لا توجد بيانات لتصديرها', 'error');
+            return;
+        }
+
         const data = [];
-
-        // جمع كل الدفعات مع بيانات الفئة الكاملة
-        const allRows = [];
-        inventory.forEach(item => {
-            if (!item.batches || item.batches.length === 0) {
-                allRows.push({ item, batch: null, remainingDays: Infinity });
-            } else {
-                item.batches.forEach(b => {
-                    const exp = b.expiryDate
-                        ? calcExpiry(b.expiryDate)
-                        : calcExpiry(b.date, b.duration);
-                    allRows.push({ item, batch: b, exp, remainingDays: exp.remainingDays ?? Infinity });
-                });
-            }
-        });
-
-        // ترتيب تصاعدي حسب تاريخ الانتهاء
-        allRows.sort((a, b) => a.remainingDays - b.remainingDays);
-
-        allRows.forEach(({ item, batch, exp }) => {
+        source.forEach(({ item, batch }) => {
             if (!batch) {
                 data.push({
-                    'الكود':          item.code,
-                    'اسم الصنف':      item.name,
-                    'تاريخ الانتهاء': '-',
+                    'الكود':           item.code,
+                    'اسم الصنف':       item.name,
+                    'تاريخ الانتهاء':  '-',
                     'الأيام المتبقية': '-',
                     'الأشهر المتبقية': '-',
-                    'الكمية':         0,
-                    'الفئة':          'لا توجد تواريخ',
-                    'الحالة':         '-'
+                    'الكمية':          0,
+                    'الفئة':           'لا توجد تواريخ',
+                    'الحالة':          '-'
                 });
                 return;
             }
+            const exp = batch.expiryDate
+                ? calcExpiry(batch.expiryDate)
+                : calcExpiry(batch.date, batch.duration);
             data.push({
-                'الكود':          item.code,
-                'اسم الصنف':      item.name,
-                'تاريخ الانتهاء': exp.expiryDateStr,
+                'الكود':           item.code,
+                'اسم الصنف':       item.name,
+                'تاريخ الانتهاء':  exp.expiryDateStr,
                 'الأيام المتبقية': exp.remainingDays !== null ? exp.remainingDays : '-',
                 'الأشهر المتبقية': exp.remainingMonths !== null ? exp.remainingMonths : '-',
-                'الكمية':         batch.qty,
-                'الفئة':          exp.categoryLabel || '-',
-                'الحالة':         exp.label
+                'الكمية':          batch.qty,
+                'الفئة':           exp.categoryLabel || '-',
+                'الحالة':          exp.label
             });
         });
 
         downloadExcel(data, "تقرير_تواريخ_الانتهاء_المفصل");
+        showToast(`تم تصدير ${data.length} عنصر حسب الفلتر الحالي`);
     }
 
     function handleNotesImport(evt) {

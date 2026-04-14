@@ -437,11 +437,14 @@ function printInventoryReport() {
 //  تقرير تواريخ الصلاحية  (مع تصنيف ذكي + ألوان + تقسيم بالفئات)
 // ═══════════════════════════════════════════════════════════════════════
 function printExpiryReport() {
-    if (typeof inventory === 'undefined' || !inventory.length) {
+    // استخدام الصفوف المفلترة الحالية (نفس ما يراه المستخدم في الجدول)
+    const source = (typeof filteredExpiryRows !== 'undefined' && filteredExpiryRows.length > 0)
+        ? filteredExpiryRows
+        : [];
+
+    if (!source.length) {
         alert('لا توجد بيانات صلاحية لطباعتها.'); return;
     }
-
-    const filterVal = (document.getElementById('exp-search')?.value || '').toLowerCase();
 
     // ── تعريف الفئات بترتيب الورود في التقرير ──
     const CATEGORIES = [
@@ -453,42 +456,30 @@ function printExpiryReport() {
         { key: 'none',     label: '⬜ بدون تاريخ انتهاء',       bg: '#fafafa', fg: '#9e9e9e', headerBg: '#bdbdbd' },
     ];
 
-    // ── جمع الصفوف وتصنيفها ──
+    // ── تصنيف الصفوف المفلترة في مجموعات حسب الفئة ──
     const groups = {};
     CATEGORIES.forEach(c => groups[c.key] = []);
 
     let totalRows = 0;
 
-    inventory.forEach(item => {
-        if (filterVal && !item.name.toLowerCase().includes(filterVal)
-                      && !item.code.toLowerCase().includes(filterVal)) return;
-
-        if (!item.batches || item.batches.length === 0) {
+    source.forEach(({ item, batch }) => {
+        if (!batch) {
             groups.none.push({ item, batch: null, exp: null });
             totalRows++;
             return;
         }
+        const exp = typeof calcExpiry === 'function'
+            ? (batch.expiryDate ? calcExpiry(batch.expiryDate) : calcExpiry(batch.date, batch.duration))
+            : { label: '-', category: 'none', expiryDateStr: '-', remainingDays: null, remainingMonths: 0 };
 
-        item.batches.forEach(batch => {
-            const exp = typeof calcExpiry === 'function'
-                ? (batch.expiryDate ? calcExpiry(batch.expiryDate) : calcExpiry(batch.date, batch.duration))
-                : { label: '-', category: 'none', expiryDateStr: '-', remainingDays: null, remainingMonths: 0 };
-
-            const catKey = exp.category || 'none';
-            if (!groups[catKey]) groups[catKey] = [];
-            groups[catKey].push({ item, batch, exp });
-            totalRows++;
-        });
+        const catKey = exp.category || 'none';
+        if (!groups[catKey]) groups[catKey] = [];
+        groups[catKey].push({ item, batch, exp });
+        totalRows++;
     });
 
-    // ── تصاعدي داخل كل فئة: الأقرب انتهاءً أولاً ──
-    CATEGORIES.forEach(c => {
-        groups[c.key].sort((a, b) => {
-            if (!a.exp || a.exp.remainingDays === null) return 1;
-            if (!b.exp || b.exp.remainingDays === null) return -1;
-            return a.exp.remainingDays - b.exp.remainingDays;
-        });
-    });
+    // الترتيب محفوظ من filteredExpiryRows (تصاعدي بالتاريخ داخل كل فئة)
+    // لا حاجة لإعادة ترتيب إضافية
 
     // ── بناء HTML الجدول مع فواصل الفئات ──
     let rowIdx = 0;
