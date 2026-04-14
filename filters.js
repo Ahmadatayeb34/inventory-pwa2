@@ -48,9 +48,12 @@ function filterByType(list, type) {
 
 /**
  * فلتر الحالة
+ * يدعم قيمة 'incomplete' لعرض كل الطلبات ما عدا المكتملة
  */
 function filterByStatus(list, status) {
     if (!status || status === 'all') return list;
+    // 'incomplete' = أظهر كل ما ليس مكتملاً (pending + in_progress + cancelled)
+    if (status === 'incomplete') return list.filter(o => o.status !== 'completed');
     return list.filter(o => o.status === status);
 }
 

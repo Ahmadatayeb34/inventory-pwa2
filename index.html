@@ -267,7 +267,7 @@
             </div>
             <div>
                 <h1 class="text-lg font-black leading-none">نظام الإدارة المتكامل - تطوير أحمد الطيب</h1>
-                <span class="text-[10px] text-slate-400 font-bold tracking-wide">نسخة محسنة V2.4</span>
+                <span class="text-[10px] text-slate-400 font-bold tracking-wide">نسخة محسنة V2.6 – الصلاحية الذكية</span>
             </div>
         </div>
 
@@ -583,6 +583,7 @@
                         </select>
                         <select id="filter-status" onchange="applyFilters()" class="h-9 rounded-lg border border-slate-200 px-2 text-xs focus:border-brand-500 outline-none w-full bg-white">
                             <option value="all">كل الحالات</option>
+                            <option value="incomplete">غير مكتمل</option>
                             <option value="pending">بانتظار التنفيذ</option>
                             <option value="in_progress">قيد التنفيذ</option>
                             <option value="completed">مكتمل</option>
@@ -678,12 +679,26 @@
                 </div>
 
                 <div class="mt-auto bg-white p-4 rounded-2xl shadow-glass border border-slate-200">
-                    <div class="flex gap-2 mb-3">
-                        <button onclick="setInvMode('add')" id="btn-inv-add" class="flex-1 py-2 rounded-lg text-xs font-bold bg-brand-600 text-white transition-colors">إضافة (+)</button>
-                        <button onclick="setInvMode('sub')" id="btn-inv-sub" class="flex-1 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-500 transition-colors">خصم (-)</button>
+                    <!-- وضع المطابقة الافتراضي -->
+                    <div id="reconcile-panel">
+                        <div class="text-center mb-2">
+                            <span class="text-[10px] font-bold text-brand-700 bg-brand-50 px-2 py-1 rounded-full"><i class="fa-solid fa-scale-balanced"></i> وضع مطابقة الجرد</span>
+                        </div>
+                        <input id="inv-input-qty" type="number" class="w-full h-12 text-center text-xl font-bold border-2 border-slate-200 rounded-xl mb-2 focus:border-brand-500 outline-none" placeholder="الكمية الفعلية المحسوبة" oninput="updateDiffPreview()">
+                        <div id="inv-diff-preview" class="text-center text-sm font-bold mb-3 h-6"></div>
+                        <button onclick="submitInventory()" class="w-full h-12 bg-brand-900 text-white rounded-xl font-bold hover:bg-brand-800 transition btn-pulse"><i class="fa-solid fa-check-circle"></i> تأكيد الجرد</button>
                     </div>
-                    <input id="inv-input-qty" type="number" class="w-full h-12 text-center text-xl font-bold border-2 border-slate-200 rounded-xl mb-3 focus:border-brand-500 outline-none" placeholder="الكمية">
-                    <button onclick="submitInventory()" class="w-full h-12 bg-brand-900 text-white rounded-xl font-bold hover:bg-brand-800 transition btn-pulse">تأكيد العملية</button>
+                    <!-- وضع الإضافة/الخصم الثانوي -->
+                    <div id="adj-panel" class="hidden">
+                        <div class="flex gap-2 mb-3">
+                            <button onclick="setInvAdjMode('add')" id="btn-inv-add" class="flex-1 py-2 rounded-lg text-xs font-bold bg-brand-600 text-white transition-colors">إضافة (+)</button>
+                            <button onclick="setInvAdjMode('sub')" id="btn-inv-sub" class="flex-1 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-500 transition-colors">خصم (-)</button>
+                        </div>
+                        <input id="inv-adj-qty" type="number" class="w-full h-12 text-center text-xl font-bold border-2 border-slate-200 rounded-xl mb-3 focus:border-brand-500 outline-none" placeholder="الكمية">
+                        <button onclick="submitAdjustment()" class="w-full h-12 bg-slate-700 text-white rounded-xl font-bold hover:bg-slate-600 transition btn-pulse">تأكيد العملية</button>
+                    </div>
+                    <!-- زر التبديل بين الوضعين -->
+                    <button onclick="toggleInvPanel()" id="btn-toggle-inv-panel" class="w-full mt-3 py-1.5 text-[10px] text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg transition"><i class="fa-solid fa-arrows-rotate"></i> التبديل إلى وضع الإضافة/الخصم</button>
                 </div>
             </div>
             
@@ -706,8 +721,9 @@
                                 <th class="p-3 w-32">الكود</th>
                                 <th class="p-3">الصنف</th>
                                 <th class="p-3 text-center w-24">النظام</th>
-                                <th class="p-3 text-center w-24 bg-blue-50 text-blue-800">الفعلي</th>
+                                <th class="p-3 text-center w-24 bg-blue-50 text-blue-800">آخر جرد</th>
                                 <th class="p-3 text-center w-24">الفارق</th>
+                                <th class="p-3 text-center w-28 text-slate-400">تاريخ الجرد</th>
                             </tr>
                         </thead>
                         <tbody id="inv-table-body" class="divide-y divide-slate-100"></tbody>
@@ -751,12 +767,8 @@
 
                 <div class="bg-amber-50 p-4 rounded-2xl border border-amber-100 space-y-3">
                     <div>
-                        <label class="text-[11px] font-bold text-amber-800 mb-1 block">تاريخ التحميص (اليوم-الشهر-السنة)</label>
+                        <label class="text-[11px] font-bold text-amber-800 mb-1 block">تاريخ الانتهاء (يوم / شهر / سنة)</label>
                         <input id="exp-date" type="date" class="w-full h-10 rounded-lg border border-amber-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20">
-                    </div>
-                    <div>
-                        <label class="text-[11px] font-bold text-amber-800 mb-1 block">مدة الصلاحية (أشهر)</label>
-                        <input id="exp-duration" type="number" value="12" class="w-full h-10 rounded-lg border border-amber-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20">
                     </div>
                     <div>
                         <label class="text-[11px] font-bold text-amber-800 mb-1 block">الكمية لهذه الدفعة</label>
@@ -787,7 +799,26 @@
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 h-full flex flex-col">
                  <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center no-print">
                      <h3 class="font-bold text-slate-700">تقرير الصلاحية التفصيلي</h3>
-                     <button onclick="printExpiryReport()" class="text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-print"></i> طباعة تقرير</button>
+                     <div class="flex gap-2">
+                         <button onclick="exportExpiryData()" class="text-xs bg-emerald-700 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600 flex items-center gap-1.5"><i class="fa-solid fa-file-excel"></i> Excel</button>
+                         <button onclick="printExpiryReport()" class="text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-print"></i> طباعة تقرير</button>
+                     </div>
+                 </div>
+                 <!-- شريط فلاتر الصلاحية -->
+                 <div class="px-4 py-2 bg-amber-50 border-b border-amber-100 flex flex-wrap gap-2 items-center no-print">
+                     <span class="text-[10px] font-black text-amber-800 ml-1">فلتر:</span>
+                     <button onclick="setExpiryFilter('dateFilter','all')" id="ef-date-all"  class="px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-600 text-white transition">الكل</button>
+                     <button onclick="setExpiryFilter('dateFilter','has')" id="ef-date-has"  class="px-3 py-1 rounded-lg text-[11px] font-bold bg-white border border-amber-200 text-amber-700 hover:bg-amber-100 transition">به تاريخ</button>
+                     <button onclick="setExpiryFilter('dateFilter','none')" id="ef-date-none" class="px-3 py-1 rounded-lg text-[11px] font-bold bg-white border border-amber-200 text-amber-700 hover:bg-amber-100 transition">بدون تاريخ</button>
+                     <span class="text-slate-300">|</span>
+                     <select id="ef-category" onchange="applyExpiryTableFilters()" class="h-8 rounded-lg border border-amber-200 px-2 text-[11px] font-bold focus:border-amber-500 outline-none bg-white text-amber-900">
+                         <option value="all">كل الفئات</option>
+                         <option value="expired">⚫ منتهي الصلاحية</option>
+                         <option value="critical">🔴 حرج (أقل من 3 أشهر)</option>
+                         <option value="warning">🟠 تحذير (3 - 6 أشهر)</option>
+                         <option value="medium">🟡 متوسط (6 - 12 شهر)</option>
+                         <option value="safe">🟢 آمن (أكثر من سنة)</option>
+                     </select>
                  </div>
                  <div class="table-container flex-1">
                      <table class="w-full text-right text-xs sm:text-sm border-collapse table-auto">
@@ -795,10 +826,10 @@
                              <tr>
                                  <th class="p-3 w-32">الكود</th>
                                  <th class="p-3">الصنف</th>
-                                 <th class="p-3 text-center w-32">تاريخ التحميص</th>
                                  <th class="p-3 text-center w-32">تاريخ الانتهاء</th>
+                                 <th class="p-3 text-center w-28">المتبقي</th>
                                  <th class="p-3 text-center w-24">الكمية</th>
-                                 <th class="p-3 text-center w-32">الحالة</th>
+                                 <th class="p-3 text-center w-36">الفئة</th>
                              </tr>
                          </thead>
                          <tbody id="exp-table-body" class="divide-y divide-slate-100"></tbody>
@@ -1266,11 +1297,15 @@
     let inventory = [];
     let currentView = 'home';
     let selectedItemIdx = -1;
-    let invMode = 'add'; 
+    let invMode = 'reconcile';
+    let invAdjMode = 'add';
     let activeOrderSource = 'showroom';
     let activeOrdersTab = 'showroom';
     let editingOrderId = null;
     let editingBatchId = null;
+    // ── حالة فلاتر الصلاحية ──
+    let expiryDateFilter = 'all';     // 'all' | 'has' | 'none'
+    let expiryCategoryFilter = 'all'; // 'all' | 'expired' | 'critical' | 'warning' | 'medium' | 'safe'
 
     function init() {
         loadTracking();
@@ -1291,6 +1326,9 @@
             if (!item.roastery) item.roastery = "";
             if (!item.notes) item.notes = "";
         });
+
+        // ترحيل البيانات القديمة للصلاحية (date+duration → expiryDate)
+        migrateBatchesFormat();
 
         // Migration and load logic for orders is handled in orders-storage.js
 
@@ -1314,8 +1352,11 @@
         inventory.forEach(item => {
             if(item.batches && item.batches.length > 0) {
                 item.batches.forEach(b => {
-                     const { remainingDays } = calcExpiry(b.date, b.duration);
-                     if(remainingDays <= 30) expAlerts++;
+                    // دعم التنسيق الجديد (expiryDate) والقديم (date+duration)
+                    const { remainingDays } = b.expiryDate
+                        ? calcExpiry(b.expiryDate)
+                        : calcExpiry(b.date, b.duration);
+                    if(remainingDays !== null && remainingDays <= 90) expAlerts++;
                 });
             }
         });
@@ -1648,14 +1689,15 @@
         document.getElementById('inv-name').innerText = item.name;
         document.getElementById('inv-code').innerText = item.code;
         document.getElementById('inv-sys-qty').innerText = item.sysQty;
-        document.getElementById('inv-current-qty').innerText = item.actualQty;
+        document.getElementById('inv-current-qty').innerText = item.physicalQty != null ? item.physicalQty : item.actualQty;
         document.getElementById('inv-input-qty').value = '';
+        document.getElementById('inv-diff-preview').innerHTML = '';
         document.getElementById('inv-input-qty').focus();
         renderInvTable();
     }
 
-    function setInvMode(m) {
-        invMode = m;
+    function setInvAdjMode(m) {
+        invAdjMode = m;
         const btnAdd = document.getElementById('btn-inv-add');
         const btnSub = document.getElementById('btn-inv-sub');
         if (m === 'add') {
@@ -1665,22 +1707,82 @@
             btnAdd.className = "flex-1 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-500 transition-colors";
             btnSub.className = "flex-1 py-2 rounded-lg text-xs font-bold bg-red-500 text-white shadow-md transition-colors";
         }
-        document.getElementById('inv-input-qty').focus();
+        document.getElementById('inv-adj-qty').focus();
+    }
+
+    function toggleInvPanel() {
+        const reconcilePanel = document.getElementById('reconcile-panel');
+        const adjPanel = document.getElementById('adj-panel');
+        const btnToggle = document.getElementById('btn-toggle-inv-panel');
+        const isReconcile = !reconcilePanel.classList.contains('hidden');
+        if (isReconcile) {
+            reconcilePanel.classList.add('hidden');
+            adjPanel.classList.remove('hidden');
+            invMode = 'adj';
+            btnToggle.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> التبديل إلى وضع مطابقة الجرد';
+        } else {
+            reconcilePanel.classList.remove('hidden');
+            adjPanel.classList.add('hidden');
+            invMode = 'reconcile';
+            btnToggle.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> التبديل إلى وضع الإضافة/الخصم';
+        }
+    }
+
+    function updateDiffPreview() {
+        if (selectedItemIdx === -1) return;
+        const val = document.getElementById('inv-input-qty').value;
+        const preview = document.getElementById('inv-diff-preview');
+        if (val === '' || val === null) { preview.innerHTML = ''; return; }
+        const physicalQty = Number(val);
+        const sysQty = inventory[selectedItemIdx].sysQty;
+        const diff = physicalQty - sysQty;
+        if (diff === 0) {
+            preview.innerHTML = '<span class="text-emerald-600">✓ متطابق</span>';
+        } else if (diff > 0) {
+            preview.innerHTML = `<span class="text-blue-600">زيادة: +${diff}</span>`;
+        } else {
+            preview.innerHTML = `<span class="text-red-500">عجز: ${diff}</span>`;
+        }
     }
 
     function submitInventory() {
         if (selectedItemIdx === -1) return;
         const inputField = document.getElementById('inv-input-qty');
+        const raw = inputField.value;
+        if (raw === '' || raw === null) return;
+        const physicalQty = Number(raw);
+        if (isNaN(physicalQty)) return;
+
+        const item = inventory[selectedItemIdx];
+        item.physicalQty = physicalQty;
+        item.difference = physicalQty - item.sysQty;
+        item.lastStockCheckDate = new Date().toISOString().split('T')[0];
+        item.actualQty = physicalQty;
+
+        document.getElementById('inv-current-qty').innerText = physicalQty;
+        document.getElementById('inv-diff-preview').innerHTML = '';
+        inputField.value = '';
+        inputField.focus();
+        
+        saveAllData();
+        renderInvTable();
+        showToast('تم تأكيد الجرد');
+    }
+
+    function submitAdjustment() {
+        if (selectedItemIdx === -1) return;
+        const inputField = document.getElementById('inv-adj-qty');
         const qtyVal = Number(inputField.value);
         if (!qtyVal && qtyVal !== 0) return;
 
-        if (invMode === 'add') {
-            inventory[selectedItemIdx].actualQty += qtyVal;
+        const item = inventory[selectedItemIdx];
+        if (invAdjMode === 'add') {
+            item.actualQty += qtyVal;
         } else {
-            inventory[selectedItemIdx].actualQty = Math.max(0, inventory[selectedItemIdx].actualQty - qtyVal);
+            item.actualQty = Math.max(0, item.actualQty - qtyVal);
         }
 
-        document.getElementById('inv-current-qty').innerText = inventory[selectedItemIdx].actualQty;
+        document.getElementById('inv-current-qty').innerText = item.actualQty;
         inputField.value = '';
         inputField.focus();
         
@@ -1709,9 +1811,12 @@
         inventory.forEach((item, idx) => {
             if (filter && !item.name.toLowerCase().includes(filter) && !item.code.toLowerCase().includes(filter)) return;
 
-            const diff = item.actualQty - item.sysQty;
+            const hasCount = item.physicalQty != null;
+            const displayQty = hasCount ? item.physicalQty : item.actualQty;
+            const diff = hasCount ? item.difference : (item.actualQty - item.sysQty);
             let diffColor = diff === 0 ? 'text-emerald-500' : (diff > 0 ? 'text-blue-500' : 'text-red-500');
             let diffSign = diff > 0 ? '+' : '';
+            const dateLabel = item.lastStockCheckDate || '—';
 
             const tr = document.createElement('tr');
             tr.className = `hover:bg-blue-50 cursor-pointer transition ${idx === selectedItemIdx ? 'bg-blue-100' : ''}`;
@@ -1720,8 +1825,9 @@
                 <td class="p-3 font-mono text-slate-500">${item.code}</td>
                 <td class="p-3 font-bold text-slate-700">${item.name}</td>
                 <td class="p-3 text-center text-slate-400 font-mono">${item.sysQty}</td>
-                <td class="p-3 text-center text-brand-900 font-black bg-white/50 rounded">${item.actualQty}</td>
+                <td class="p-3 text-center text-brand-900 font-black bg-white/50 rounded">${displayQty}</td>
                 <td class="p-3 text-center font-bold ${diffColor} dir-ltr">${diffSign}${diff}</td>
+                <td class="p-3 text-center text-[10px] text-slate-400 font-mono">${dateLabel}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -1751,6 +1857,157 @@
     }
 
     // ========== EXPIRY ==========
+
+    // ── دالة ترحيل البيانات القديمة (date+duration → expiryDate) ──
+    function migrateBatchesFormat() {
+        let migrated = false;
+        inventory.forEach(item => {
+            if (!item.batches) return;
+            item.batches.forEach(batch => {
+                if (!batch.expiryDate && batch.date) {
+                    const prodDate = new Date(batch.date);
+                    const duration = Number(batch.duration) || 12;
+                    const expDate = new Date(prodDate);
+                    expDate.setMonth(expDate.getMonth() + duration);
+                    batch.expiryDate = expDate.toISOString().split('T')[0];
+                    migrated = true;
+                }
+            });
+        });
+        if (migrated) {
+            saveAllData();
+            console.log('تم ترحيل بيانات الصلاحية إلى التنسيق الجديد (expiryDate)');
+        }
+    }
+
+    // ── حساب عدد الأيام المتبقية من تاريخ الانتهاء ──
+    function calculateRemainingDays(expiryDateStr) {
+        if (!expiryDateStr) return null;
+        const expDate = new Date(expiryDateStr);
+        if (isNaN(expDate.getTime())) return null;
+        expDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+    }
+
+    // ── تحديد فئة الصنف حسب الأيام المتبقية ──
+    function getExpiryCategory(daysRemaining) {
+        if (daysRemaining === null || daysRemaining === undefined) return null;
+        if (daysRemaining < 0)   return { key: 'expired',  label: 'منتهي',  icon: '⚫', colorClass: 'bg-gray-200 text-gray-700',    bgColor: '#f5f5f5', textColor: '#424242' };
+        if (daysRemaining < 90)  return { key: 'critical', label: 'حرج',    icon: '🔴', colorClass: 'bg-red-100 text-red-700',      bgColor: '#ffebee', textColor: '#c62828' };
+        if (daysRemaining < 180) return { key: 'warning',  label: 'تحذير',  icon: '🟠', colorClass: 'bg-orange-100 text-orange-700', bgColor: '#fff3e0', textColor: '#e65100' };
+        if (daysRemaining < 365) return { key: 'medium',   label: 'متوسط',  icon: '🟡', colorClass: 'bg-yellow-100 text-yellow-700', bgColor: '#fffde7', textColor: '#f57f17' };
+        return                   { key: 'safe',     label: 'آمن',    icon: '🟢', colorClass: 'bg-green-100 text-green-700',  bgColor: '#e8f5e9', textColor: '#1b5e20' };
+    }
+
+    /**
+     * الدالة الرئيسية لحساب الصلاحية
+     * تدعم التنسيق الجديد: calcExpiry(expiryDateStr)
+     * وتدعم التنسيق القديم للتوافق: calcExpiry(roastDate, durationMonths)
+     */
+    function calcExpiry(arg1, arg2) {
+        let expiryDateStr;
+        // دعم التنسيق القديم: arg1=تاريخ الإنتاج, arg2=المدة بالأشهر
+        if (arg2 !== undefined && arg1) {
+            const prodDate = new Date(arg1);
+            const expDate  = new Date(prodDate);
+            expDate.setMonth(expDate.getMonth() + Number(arg2 || 12));
+            expiryDateStr = expDate.toISOString().split('T')[0];
+        } else {
+            expiryDateStr = arg1;
+        }
+
+        if (!expiryDateStr) {
+            return { remainingDays: 0, remainingMonths: 0, label: '-', colorClass: '', category: '', categoryLabel: '', expiryDateStr: '-', bgColor: '', textColor: '' };
+        }
+
+        const remainingDays   = calculateRemainingDays(expiryDateStr);
+        const remainingMonths = Math.floor(Math.max(remainingDays || 0, 0) / 30);
+        const cat             = getExpiryCategory(remainingDays);
+
+        // صياغة label وصفية
+        let label;
+        if (remainingDays === null) {
+            label = '-';
+        } else if (remainingDays < 0) {
+            label = `منتهي (${Math.abs(remainingDays)} يوم)`;
+        } else if (remainingDays === 0) {
+            label = '⚠ ينتهي اليوم!';
+        } else if (remainingDays < 90) {
+            label = `🔴 حرج: ${remainingDays} يوم`;
+        } else if (remainingDays < 180) {
+            label = `🟠 تحذير: ${remainingMonths} شهر`;
+        } else if (remainingDays < 365) {
+            label = `🟡 متوسط: ${remainingMonths} شهر`;
+        } else {
+            label = remainingMonths >= 24
+                ? `🟢 آمن: ${Math.floor(remainingMonths / 12)} سنة`
+                : `🟢 آمن: ${remainingMonths} شهر`;
+        }
+
+        // تنسيق تاريخ الانتهاء بالشكل DD/MM/YYYY
+        const expDateObj = new Date(expiryDateStr);
+        const dd = expDateObj.getDate().toString().padStart(2, '0');
+        const mm = (expDateObj.getMonth() + 1).toString().padStart(2, '0');
+        const yyyy = expDateObj.getFullYear();
+
+        return {
+            remainingDays,
+            remainingMonths,
+            label,
+            colorClass:    cat ? cat.colorClass : '',
+            category:      cat ? cat.key        : '',
+            categoryLabel: cat ? `${cat.icon} ${cat.label}` : '',
+            expiryDateStr: `${dd}/${mm}/${yyyy}`,
+            bgColor:       cat ? cat.bgColor    : '',
+            textColor:     cat ? cat.textColor  : '',
+            expDateObj
+        };
+    }
+
+    /**
+     * تطبيق فلاتر الصلاحية على قائمة الأصناف
+     */
+    function applyExpiryFilters(itemsList, filters) {
+        const { dateFilter, categoryFilter } = filters;
+        return itemsList.filter(item => {
+            const hasBatches = item.batches && item.batches.length > 0;
+            if (dateFilter === 'has'  && !hasBatches) return false;
+            if (dateFilter === 'none' &&  hasBatches) return false;
+            if (categoryFilter !== 'all' && hasBatches) {
+                return item.batches.some(b => {
+                    const exp = calcExpiry(b.expiryDate);
+                    return exp.category === categoryFilter;
+                });
+            }
+            return true;
+        });
+    }
+
+    // ── setter لفلتر التاريخ في شريط الفلاتر ──
+    function setExpiryFilter(filterType, value) {
+        if (filterType === 'dateFilter') {
+            expiryDateFilter = value;
+            ['all', 'has', 'none'].forEach(v => {
+                const btn = document.getElementById(`ef-date-${v}`);
+                if (!btn) return;
+                if (v === value) {
+                    btn.className = 'px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-600 text-white transition';
+                } else {
+                    btn.className = 'px-3 py-1 rounded-lg text-[11px] font-bold bg-white border border-amber-200 text-amber-700 hover:bg-amber-100 transition';
+                }
+            });
+        }
+        renderExpTable();
+    }
+
+    // ── apply category filter من select ──
+    function applyExpiryTableFilters() {
+        expiryCategoryFilter = document.getElementById('ef-category')?.value || 'all';
+        renderExpTable();
+    }
+
     function resetExpUI() {
         document.getElementById('exp-empty').classList.remove('hidden');
         document.getElementById('exp-card').classList.add('hidden');
@@ -1759,48 +2016,53 @@
 
     function addBatch() {
         if (selectedItemIdx === -1) return;
-        const dateStr = document.getElementById('exp-date').value;
-        const qty = Number(document.getElementById('exp-qty').value);
-        const duration = Number(document.getElementById('exp-duration').value) || 12;
+        const expiryDateStr = document.getElementById('exp-date').value;
+        const qty           = Number(document.getElementById('exp-qty').value);
 
-        if (!dateStr || !qty) {
-            showToast('يرجى إدخال التاريخ والكمية', 'error');
+        if (!expiryDateStr || !qty) {
+            showToast('يرجى إدخال تاريخ الانتهاء والكمية', 'error');
+            return;
+        }
+        // التحقق من صحة التاريخ
+        if (isNaN(new Date(expiryDateStr).getTime())) {
+            showToast('تاريخ الانتهاء غير صالح', 'error');
             return;
         }
 
         if (editingBatchId) {
-             const batchIndex = inventory[selectedItemIdx].batches.findIndex(b => b.id === editingBatchId);
-             if (batchIndex !== -1) {
-                 inventory[selectedItemIdx].batches[batchIndex].date = dateStr;
-                 inventory[selectedItemIdx].batches[batchIndex].qty = qty;
-                 inventory[selectedItemIdx].batches[batchIndex].duration = duration;
-                 showToast('تم تحديث الدفعة');
-                 cancelBatchEdit();
-             }
+            const batchIndex = inventory[selectedItemIdx].batches.findIndex(b => b.id === editingBatchId);
+            if (batchIndex !== -1) {
+                inventory[selectedItemIdx].batches[batchIndex].expiryDate = expiryDateStr;
+                inventory[selectedItemIdx].batches[batchIndex].qty        = qty;
+                showToast('تم تحديث الدفعة');
+                cancelBatchEdit();
+            }
         } else {
-            const newBatch = { id: Date.now(), date: dateStr, qty: qty, duration: duration };
+            const newBatch = { id: Date.now(), expiryDate: expiryDateStr, qty };
             inventory[selectedItemIdx].batches.push(newBatch);
-            showToast('تم إضافة الدفعة');
+            showToast('تم إضافة التاريخ');
         }
 
-        inventory[selectedItemIdx].batches.sort((a, b) => new Date(a.date) - new Date(b.date));
-        
+        // ترتيب الدفعات حسب تاريخ الانتهاء (الأقرب أولاً)
+        inventory[selectedItemIdx].batches.sort((a, b) =>
+            new Date(a.expiryDate) - new Date(b.expiryDate)
+        );
+
         saveAllData();
         renderBatchesList(inventory[selectedItemIdx]);
         renderExpTable();
-        
-        document.getElementById('exp-qty').value = '';
+
+        document.getElementById('exp-qty').value  = '';
         document.getElementById('exp-date').value = '';
     }
-    
+
     function editBatch(batchId) {
         if (selectedItemIdx === -1) return;
         const batch = inventory[selectedItemIdx].batches.find(b => b.id === batchId);
-        if(batch) {
-            document.getElementById('exp-date').value = batch.date;
-            document.getElementById('exp-qty').value = batch.qty;
-            document.getElementById('exp-duration').value = batch.duration;
-            
+        if (batch) {
+            // دعم الحقل القديم (date) عند الضرورة
+            document.getElementById('exp-date').value = batch.expiryDate || batch.date || '';
+            document.getElementById('exp-qty').value  = batch.qty;
             editingBatchId = batchId;
             document.getElementById('btn-add-batch').innerHTML = '<i class="fa-solid fa-save"></i> حفظ التعديل';
             document.getElementById('btn-cancel-batch').classList.remove('hidden');
@@ -1809,46 +2071,48 @@
 
     function cancelBatchEdit() {
         editingBatchId = null;
-        document.getElementById('exp-qty').value = '';
+        document.getElementById('exp-qty').value  = '';
         document.getElementById('exp-date').value = '';
-        document.getElementById('exp-duration').value = '12';
         document.getElementById('btn-add-batch').innerHTML = '<i class="fa-solid fa-plus"></i> إضافة التاريخ';
         document.getElementById('btn-cancel-batch').classList.add('hidden');
     }
 
     function deleteBatch(batchId) {
-         if (selectedItemIdx === -1) return;
-         if(confirm('حذف هذا التاريخ؟')) {
+        if (selectedItemIdx === -1) return;
+        if (confirm('حذف هذا التاريخ؟')) {
             inventory[selectedItemIdx].batches = inventory[selectedItemIdx].batches.filter(b => b.id !== batchId);
             saveAllData();
             renderBatchesList(inventory[selectedItemIdx]);
             renderExpTable();
             showToast('تم حذف الدفعة');
             if (editingBatchId === batchId) cancelBatchEdit();
-         }
+        }
     }
 
     function renderBatchesList(item) {
         const list = document.getElementById('exp-batches-list');
         list.innerHTML = '';
-        
+
         if (!item.batches || item.batches.length === 0) {
             list.innerHTML = '<div class="text-xs text-slate-400 text-center py-2">لا توجد دفعات مسجلة</div>';
             return;
         }
 
         item.batches.forEach(batch => {
-            const { remainingDays, label, colorClass, expiryDateStr } = calcExpiry(batch.date, batch.duration);
+            // دعم الحقل القديم (date+duration) والجديد (expiryDate)
+            const exp = batch.expiryDate
+                ? calcExpiry(batch.expiryDate)
+                : calcExpiry(batch.date, batch.duration);
             const div = document.createElement('div');
             div.className = 'bg-white border border-slate-100 p-2 rounded-lg flex justify-between items-center shadow-sm';
+            div.style.borderRight = `3px solid ${exp.textColor || '#ccc'}`;
             div.innerHTML = `
                 <div>
-                    <div class="text-[10px] text-slate-400">تحميص: ${formatDateDisplay(batch.date)}</div>
-                    <div class="text-[10px] text-red-400">انتهاء: ${expiryDateStr}</div>
+                    <div class="text-[10px] font-bold" style="color:${exp.textColor}">انتهاء: ${exp.expiryDateStr}</div>
                     <div class="text-xs font-bold text-slate-700">الكمية: ${batch.qty}</div>
                 </div>
                 <div class="text-right flex gap-2 items-center">
-                    <span class="block text-[10px] px-2 py-0.5 rounded ${colorClass} mb-1">${label}</span>
+                    <span class="block text-[10px] px-2 py-0.5 rounded ${exp.colorClass} mb-1">${exp.label}</span>
                     <div>
                         <button onclick="editBatch(${batch.id})" class="text-[10px] text-blue-400 hover:text-blue-600 underline ml-2">تعديل</button>
                         <button onclick="deleteBatch(${batch.id})" class="text-[10px] text-red-400 hover:text-red-600 underline">حذف</button>
@@ -1859,53 +2123,60 @@
         });
     }
 
-    function calcExpiry(roastDateStr, durationMonths = 12) {
-        if(!roastDateStr) return { remainingDays: 0, label: '-', colorClass: '', expiryDateStr: '-' };
-        
-        const prodDate = new Date(roastDateStr);
-        const expDate = new Date(prodDate);
-        expDate.setMonth(expDate.getMonth() + durationMonths);
-        
-        const today = new Date();
-        const diffTime = expDate - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        let label = '';
-        let colorClass = '';
-
-        if (diffDays < 0) {
-            label = `منتهي (${Math.abs(diffDays)} يوم)`;
-            colorClass = 'bg-red-100 text-red-700';
-        } else if (diffDays <= 30) {
-            label = `باقي ${diffDays} يوم`;
-            colorClass = 'bg-amber-100 text-amber-700';
-        } else {
-            const months = Math.floor(diffDays / 30);
-            label = `باقي ${months} شهر`;
-            colorClass = 'bg-emerald-100 text-emerald-700';
-        }
-        
-        const d = expDate.getDate().toString().padStart(2, '0');
-        const m = (expDate.getMonth() + 1).toString().padStart(2, '0');
-        const y = expDate.getFullYear();
-        const expiryDateStr = `${d}/${m}/${y}`;
-
-        return { remainingDays: diffDays, label, colorClass, expiryDateStr, expDateObj: expDate };
-    }
-
-    function renderExpTable(filter = '') {
+    /**
+     * رسم جدول الصلاحية مع الفلاتر والترتيب الذكي
+     * يرتب الأصناف من الأقرب انتهاءً إلى الأبعد
+     */
+    function renderExpTable(textFilter = '') {
         const tbody = document.getElementById('exp-table-body');
         tbody.innerHTML = '';
 
+        // بناء قائمة الصفوف مع تاريخ الترتيب
+        const allRows = [];
         inventory.forEach((item, idx) => {
-            if (filter && !item.name.toLowerCase().includes(filter)) return;
-            
-            // Fix: Always render the item even if no batches exist so it can be selected
-            if (!item.batches || item.batches.length === 0) {
-                 const tr = document.createElement('tr');
-                 tr.className = `hover:bg-amber-50 cursor-pointer transition ${idx === selectedItemIdx ? 'bg-amber-100' : ''}`;
-                 tr.onclick = () => selectItem(idx, 'expiry');
-                 tr.innerHTML = `
+            if (textFilter && !item.name.toLowerCase().includes(textFilter.toLowerCase())
+                           && !item.code.toLowerCase().includes(textFilter.toLowerCase())) return;
+
+            const hasBatches = item.batches && item.batches.length > 0;
+
+            // فلتر وجود تاريخ
+            if (expiryDateFilter === 'has'  && !hasBatches) return;
+            if (expiryDateFilter === 'none' &&  hasBatches) {
+                allRows.push({ item, idx, batch: null, sortDate: Infinity });
+                return;
+            }
+
+            if (!hasBatches) {
+                allRows.push({ item, idx, batch: null, sortDate: Infinity });
+            } else {
+                item.batches.forEach(batch => {
+                    const expDateStr = batch.expiryDate || batch.date;
+                    const exp        = batch.expiryDate
+                        ? calcExpiry(batch.expiryDate)
+                        : calcExpiry(batch.date, batch.duration);
+
+                    // فلتر الفئة
+                    if (expiryCategoryFilter !== 'all' && exp.category !== expiryCategoryFilter) return;
+
+                    allRows.push({
+                        item, idx, batch,
+                        sortDate: new Date(expDateStr).getTime()
+                    });
+                });
+            }
+        });
+
+        // ترتيب: الأقرب انتهاءً أولاً، الأصناف بلا تاريخ في الآخر
+        allRows.sort((a, b) => a.sortDate - b.sortDate);
+
+        allRows.forEach(({ item, idx, batch }) => {
+            const tr = document.createElement('tr');
+            tr.className = `cursor-pointer transition border-b border-slate-50 ${idx === selectedItemIdx ? 'bg-amber-100' : ''}`;
+            tr.onclick = () => selectItem(idx, 'expiry');
+
+            if (!batch) {
+                // صنف بلا تواريخ
+                tr.innerHTML = `
                     <td class="p-3 font-mono text-slate-500 text-xs">${item.code}</td>
                     <td class="p-3 font-bold text-slate-700">${item.name}</td>
                     <td class="p-3 text-center text-slate-300">-</td>
@@ -1913,25 +2184,36 @@
                     <td class="p-3 text-center text-slate-300">0</td>
                     <td class="p-3 text-center text-slate-300 text-[10px]">اضغط لإضافة تاريخ</td>
                 `;
-                tbody.appendChild(tr);
             } else {
-                item.batches.forEach((batch) => {
-                    const { label, colorClass, expiryDateStr } = calcExpiry(batch.date, batch.duration);
-                    const tr = document.createElement('tr');
-                    tr.className = `hover:bg-amber-50 cursor-pointer transition border-b border-slate-50 ${idx === selectedItemIdx ? 'bg-amber-100' : ''}`;
-                    tr.onclick = () => selectItem(idx, 'expiry');
+                const exp = batch.expiryDate
+                    ? calcExpiry(batch.expiryDate)
+                    : calcExpiry(batch.date, batch.duration);
 
-                    tr.innerHTML = `
-                        <td class="p-3 font-mono text-slate-500 text-xs">${item.code}</td>
-                        <td class="p-3 font-bold text-slate-700">${item.name}</td>
-                        <td class="p-3 text-center font-mono text-slate-600">${formatDateDisplay(batch.date)}</td>
-                        <td class="p-3 text-center font-mono text-red-600 font-bold">${expiryDateStr}</td>
-                        <td class="p-3 text-center font-bold text-slate-800">${batch.qty}</td>
-                        <td class="p-3 text-center"><span class="px-2 py-1 rounded text-[10px] ${colorClass}">${label}</span></td>
-                    `;
-                    tbody.appendChild(tr);
-                });
+                // تلوين خلفية الصف بلون خفيف حسب الفئة
+                if (idx !== selectedItemIdx && exp.bgColor) {
+                    tr.style.backgroundColor = exp.bgColor + '60';
+                }
+
+                const daysDisp = exp.remainingDays === null
+                    ? '-'
+                    : exp.remainingDays < 0
+                        ? `منتهي`
+                        : exp.remainingDays < 90
+                            ? `${exp.remainingDays} يوم`
+                            : `${exp.remainingMonths} شهر`;
+
+                tr.innerHTML = `
+                    <td class="p-3 font-mono text-slate-500 text-xs">${item.code}</td>
+                    <td class="p-3 font-bold text-slate-700">${item.name}</td>
+                    <td class="p-3 text-center font-mono font-bold" style="color:${exp.textColor}">${exp.expiryDateStr}</td>
+                    <td class="p-3 text-center font-bold" style="color:${exp.textColor}">${daysDisp}</td>
+                    <td class="p-3 text-center font-bold text-slate-800">${batch.qty}</td>
+                    <td class="p-3 text-center">
+                        <span class="px-2 py-1 rounded text-[10px] font-bold ${exp.colorClass}">${exp.label}</span>
+                    </td>
+                `;
             }
+            tbody.appendChild(tr);
         });
     }
 
@@ -2007,7 +2289,6 @@
             if (context === 'notes') renderNoteTable();
             return;
         }
-
         let matches = inventory.map((item, idx) => ({ ...item, idx })).filter(item => {
             const basicMatch = item.name.toLowerCase().includes(query) || item.code.includes(query);
             if (context === 'notes') {
@@ -2048,7 +2329,6 @@
             document.getElementById('exp-name').innerText = item.name;
             document.getElementById('exp-date').value = '';
             document.getElementById('exp-qty').value = '';
-            document.getElementById('exp-duration').value = '12';
             cancelBatchEdit();
             renderBatchesList(item);
         }
@@ -2063,34 +2343,142 @@
     }
 
     // ========== IMPORT/EXPORT ==========
+
+    /**
+     * تحويل قيمة خلية Excel إلى رقم بأمان
+     * يعيد null إذا كانت القيمة فارغة أو غير قابلة للتحويل
+     */
+    function parseExcelQty(val) {
+        if (val === null || val === undefined || val === '') return null;
+        // إزالة الفواصل والمسافات ثم التحويل
+        const n = parseFloat(String(val).replace(/,/g, '').trim());
+        return isNaN(n) ? null : n;
+    }
+
+    /**
+     * اكتشاف دقيق لأعمدة Excel – تطابق حرفي أولاً ثم تعبير منتظم
+     *
+     * خريطة الأعمدة المعروفة في الملف المصدر:
+     *   "الصنف"        → code  (كود الصنف في النظام)
+     *   "اسم الصنف"   → name  (اسم الصنف في النظام)
+     *   "كمية الرصيد" → qty   (الكمية بالنظام / sysQty)
+     */
+    function mapExcelColumns(headerRow) {
+        const map = { code: -1, name: -1, qty: -1, roastery: -1, notes: -1 };
+
+        // ── مرحلة 1: تطابق حرفي دقيق (الأولوية القصوى) ──
+        // يُحل الغموض بين أسماء متشابهة كـ"الصنف" و"اسم الصنف"
+        const exactLists = {
+            code:     ['الصنف', 'صنف', 'الكود', 'كود', 'code', 'رمز', 'item code', 'رقم الصنف', 'رقم الصنف'],
+            name:     ['اسم الصنف', 'اسم المنتج', 'اسم الصنف', 'item name', 'product name', 'name', 'المنتج'],
+            qty:      ['كمية الرصيد', 'الرصيد', 'الكمية', 'رصيد', 'كمية', 'qty', 'quantity', 'stock', 'مخزون', 'عدد'],
+            roastery: ['المحمصة', 'محمصة', 'roastery', 'company', 'المورد', 'مورد'],
+            notes:    ['ملاحظات', 'ملاحظة', 'إيحاءات', 'notes', 'note', 'وصف', 'description']
+        };
+
+        headerRow.forEach((header, idx) => {
+            if (header === null || header === undefined) return;
+            const h = String(header).trim();
+            for (const [field, list] of Object.entries(exactLists)) {
+                if (map[field] === -1 && list.some(exact => exact.toLowerCase() === h.toLowerCase())) {
+                    map[field] = idx;
+                }
+            }
+        });
+
+        // ── مرحلة 2: تعبير منتظم للأسماء غير المتوقعة (احتياطي) ──
+        // لا يعمل إلا إذا لم تُكتشف بالمرحلة الأولى
+        const fuzzyPatterns = {
+            code:     /كود|code|رمز|رقم.*صنف|item.*code/i,
+            name:     /اسم.*صنف|اسم.*منتج|item.*name|product.*name/i,
+            qty:      /كمية|رصيد|qty|quantity|stock|مخزون|عدد/i,
+            roastery: /محمصة|roastery|شركة|مورد/i,
+            notes:    /ملاحظ|note|إيحاء|وصف|desc/i
+        };
+
+        headerRow.forEach((header, idx) => {
+            if (header === null || header === undefined) return;
+            const h = String(header).trim();
+            for (const [field, pattern] of Object.entries(fuzzyPatterns)) {
+                if (map[field] === -1 && pattern.test(h)) {
+                    map[field] = idx;
+                }
+            }
+        });
+
+        // ── مرحلة 3: fallback موضعي إذا فشل الكشف ──
+        if (map.code === -1) map.code = 0;
+        if (map.name === -1) map.name = map.code === 0 ? 1 : 0;
+        if (map.qty  === -1) map.qty  = 2;
+
+        return map;
+    }
+
     function updateOrAddItem(code, name, sysQty, roastery = null, notes = null) {
+        const parsedQty = parseExcelQty(sysQty);
+        const qty = parsedQty !== null ? parsedQty : 0;
         let item = inventory.find(x => x.code === String(code));
         if (!item) {
-            item = { 
-                code: String(code), 
-                name: name || 'صنف جديد', 
-                sysQty: Number(sysQty) || 0, 
-                actualQty: 0, 
-                batches: [], 
-                roastery: roastery || '', 
-                notes: notes || '' 
+            // FIX: actualQty يساوي sysQty عند الإنشاء (لا يُصفَّر افتراضياً)
+            item = {
+                code:      String(code),
+                name:      name || 'صنف جديد',
+                sysQty:    qty,
+                actualQty: qty,
+                batches:   [],
+                roastery:  roastery || '',
+                notes:     notes    || ''
             };
             inventory.push(item);
         } else {
             if (name) item.name = name;
-            if (sysQty !== undefined && sysQty !== null) item.sysQty = Number(sysQty);
+            if (parsedQty !== null) item.sysQty = parsedQty;
             if (roastery !== null) item.roastery = roastery;
-            if (notes !== null) item.notes = notes;
+            if (notes    !== null) item.notes    = notes;
         }
     }
 
+    /**
+     * الاستيراد الشامل (Global) – يستخدم نفس منطق mapExcelColumns
+     * يُحدِّث الاسم + sysQty ويضبط actualQty عند الإنشاء
+     */
     function handleGlobalImport(evt) {
-        processExcel(evt, (row) => {
-            const code = row[0];
-            if (code) {
-                updateOrAddItem(code, row[1], row[2], row[3], row[4]);
+        const file = evt.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const rawData  = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(rawData, { type: 'array' });
+                const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+                const rows     = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+                if (rows.length < 2) { showToast('الملف فارغ', 'error'); evt.target.value = ''; return; }
+
+                const colMap = mapExcelColumns(rows[0]);
+                let count = 0;
+                for (let i = 1; i < rows.length; i++) {
+                    const row  = rows[i];
+                    const code = String(row[colMap.code] ?? '').trim();
+                    if (!code) continue;
+                    const roastery = colMap.roastery !== -1 ? String(row[colMap.roastery] ?? '').trim() : null;
+                    const notes    = colMap.notes    !== -1 ? String(row[colMap.notes]    ?? '').trim() : null;
+                    updateOrAddItem(code, String(row[colMap.name] ?? '').trim(), row[colMap.qty], roastery, notes);
+                    count++;
+                }
+                saveAllData();
+                if      (currentView === 'inventory') renderInvTable();
+                else if (currentView === 'expiry')    renderExpTable();
+                else if (currentView === 'notes')     renderNoteTable();
+                else if (currentView === 'home')      updateDashboardStats();
+                showToast(`✅ تم تحديث ${count} صنف في جميع الصفحات`);
+            } catch(err) {
+                console.error('[استيراد شامل]', err);
+                showToast('خطأ في قراءة الملف: ' + err.message, 'error');
+            } finally {
+                evt.target.value = '';
             }
-        }, 'تم تحديث البيانات في جميع الصفحات');
+        };
+        reader.readAsArrayBuffer(file);
     }
 
     function exportGlobalData() {
@@ -2098,50 +2486,138 @@
         inventory.forEach(item => {
             if (item.batches && item.batches.length > 0) {
                 item.batches.forEach(b => {
-                    const { expiryDateStr } = calcExpiry(b.date, b.duration);
+                    const exp = b.expiryDate
+                        ? calcExpiry(b.expiryDate)
+                        : calcExpiry(b.date, b.duration);
                     data.push({
-                        'الكود': item.code,
-                        'الصنف': item.name,
-                        'المحمصة': item.roastery,
-                        'الملاحظات': item.notes,
-                        'الكمية بالنظام': item.sysQty,
-                        'الكمية الفعلية': item.actualQty,
-                        'الفارق': item.actualQty - item.sysQty,
-                        'تاريخ التحميص': formatDateDisplay(b.date),
-                        'تاريخ الانتهاء': expiryDateStr,
-                        'كمية الدفعة': b.qty
+                        'الكود':           item.code,
+                        'الصنف':           item.name,
+                        'المحمصة':         item.roastery,
+                        'الملاحظات':       item.notes,
+                        'الكمية بالنظام':  item.sysQty,
+                        'الكمية الفعلية':  item.actualQty,
+                        'الفارق':          item.actualQty - item.sysQty,
+                        'تاريخ الانتهاء':  exp.expiryDateStr,
+                        'الأيام المتبقية': exp.remainingDays ?? '-',
+                        'الفئة':           exp.categoryLabel || '-',
+                        'كمية الدفعة':     b.qty
                     });
                 });
             } else {
                 data.push({
-                    'الكود': item.code,
-                    'الصنف': item.name,
-                    'المحمصة': item.roastery,
-                    'الملاحظات': item.notes,
-                    'الكمية بالنظام': item.sysQty,
-                    'الكمية الفعلية': item.actualQty,
-                    'الفارق': item.actualQty - item.sysQty,
-                    'تاريخ التحميص': '-',
-                    'تاريخ الانتهاء': '-',
-                    'كمية الدفعة': '-'
+                    'الكود':           item.code,
+                    'الصنف':           item.name,
+                    'المحمصة':         item.roastery,
+                    'الملاحظات':       item.notes,
+                    'الكمية بالنظام':  item.sysQty,
+                    'الكمية الفعلية':  item.actualQty,
+                    'الفارق':          item.actualQty - item.sysQty,
+                    'تاريخ الانتهاء':  '-',
+                    'الأيام المتبقية': '-',
+                    'الفئة':           '-',
+                    'كمية الدفعة':     '-'
                 });
             }
         });
         downloadExcel(data, "التقرير_الشامل_المفصل");
     }
 
+    /**
+     * استيراد ذكي لبيانات الجرد:
+     * - يكتشف أعمدة Excel تلقائياً بالاسم (عربي / إنجليزي) ثم يعود للترتيب الموضعي
+     * - يضبط sysQty و actualQty معاً من نفس القيمة المستوردة
+     * - يُسجّل عدد الأصناف الناجحة والفاشلة
+     */
     function handleInventoryImport(evt) {
-        processExcel(evt, (row) => {
-            const code = row[0];
-            if (code) {
-                let item = inventory.find(x => x.code === String(code));
-                if (item) {
-                    item.sysQty = Number(row[2]) || item.sysQty; 
-                } else {
-                    updateOrAddItem(code, row[1], row[2]);
+        const file = evt.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const rawData  = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(rawData, { type: 'array' });
+                const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+                // defval:'' يضمن الحصول على خلايا فارغة كـ '' لا كـ undefined
+                const rows     = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+                if (rows.length < 2) {
+                    showToast('الملف فارغ أو لا يحتوي على صفوف بيانات', 'error');
+                    evt.target.value = '';
+                    return;
                 }
+
+                // ── اكتشاف الأعمدة من الصف الأول (الترويسة) ──
+                const colMap = mapExcelColumns(rows[0]);
+                console.log('[استيراد الجرد] خريطة الأعمدة:', colMap);
+
+                let imported = 0, failed = 0, skipped = 0;
+                const failedRows = [];
+
+                for (let i = 1; i < rows.length; i++) {
+                    const row  = rows[i];
+                    const code = String(row[colMap.code] ?? '').trim();
+                    const name = String(row[colMap.name] ?? '').trim();
+
+                    // تخطي الصفوف بدون كود
+                    if (!code) { skipped++; continue; }
+
+                    // ── تحليل الكمية بأمان ──
+                    const qty = parseExcelQty(row[colMap.qty]);
+                    if (qty === null) {
+                        console.warn(`[استيراد] صف ${i + 1} – كمية غير صالحة: "${row[colMap.qty]}", سيتم تعيين 0`);
+                        failedRows.push(i + 1);
+                        failed++;
+                    }
+                    const finalQty = qty !== null ? qty : 0;
+
+                    let item = inventory.find(x => x.code === code);
+                    if (item) {
+                        // ── تحديث صنف موجود: كلا الكميتين تُضبط معاً ──
+                        if (name) item.name       = name;
+                        item.sysQty    = finalQty;
+                        item.actualQty = finalQty;
+                    } else {
+                        // ── إنشاء صنف جديد: actualQty = sysQty = الكمية المستوردة ──
+                        item = {
+                            code,
+                            name:      name || `صنف ${code}`,
+                            sysQty:    finalQty,
+                            actualQty: finalQty,
+                            batches:   [],
+                            roastery:  colMap.roastery !== -1 ? String(row[colMap.roastery] ?? '').trim() : '',
+                            notes:     colMap.notes    !== -1 ? String(row[colMap.notes]    ?? '').trim() : ''
+                        };
+                        inventory.push(item);
+                    }
+                    imported++;
+                }
+
+                // ── تسجيل النتيجة في Console ──
+                console.log(`[استيراد الجرد] ✅ مستورد: ${imported} | ⚠ كمية غير صالحة: ${failed} | تم تخطّيه: ${skipped}`);
+                if (failedRows.length > 0)
+                    console.warn('[استيراد الجرد] صفوف بكمية غير صالحة:', failedRows.join(', '));
+
+                saveAllData();
+
+                // ── تحديث الواجهة فوراً ──
+                if      (currentView === 'inventory') renderInvTable();
+                else if (currentView === 'expiry')    renderExpTable();
+                else if (currentView === 'home')      updateDashboardStats();
+
+                const msg = imported > 0
+                    ? `✅ تم استيراد ${imported} صنف بنجاح` + (failed > 0 ? ` (${failed} صف بكمية غير صالحة، تم تعيين الكمية = 0)` : '')
+                    : '⚠ لم يتم استيراد أي صنف، تحقق من تنسيق الملف';
+                showToast(msg, imported > 0 ? 'success' : 'error');
+
+            } catch(err) {
+                console.error('[استيراد الجرد]', err);
+                showToast('خطأ في قراءة الملف: ' + err.message, 'error');
+            } finally {
+                evt.target.value = '';
             }
-        }, 'تم استيراد بيانات الجرد');
+        };
+        reader.readAsArrayBuffer(file);
     }
 
     function exportInventoryData() {
@@ -2155,39 +2631,99 @@
         downloadExcel(data, "تقرير_الجرد");
     }
 
+    /**
+     * استيراد أصناف الصلاحية – يستخدم mapExcelColumns لاكتشاف الأعمدة تلقائياً
+     * يُحدِّث الصنف إن وُجد (بدون تكرار) أو يُنشئه بكمية صفر
+     */
     function handleExpiryImport(evt) {
-        processExcel(evt, (row) => {
-            const code = row[0];
-            if (code) updateOrAddItem(code, row[1], null); 
-        }, 'تم استيراد أصناف الصلاحية');
+        const file = evt.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const rawData  = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(rawData, { type: 'array' });
+                const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+                const rows     = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+                if (rows.length < 2) { showToast('الملف فارغ', 'error'); evt.target.value = ''; return; }
+
+                const colMap = mapExcelColumns(rows[0]);
+                console.log('[استيراد الصلاحية] خريطة الأعمدة:', colMap);
+
+                let imported = 0, skipped = 0;
+                for (let i = 1; i < rows.length; i++) {
+                    const row  = rows[i];
+                    const code = String(row[colMap.code] ?? '').trim();
+                    const name = String(row[colMap.name] ?? '').trim();
+                    if (!code) { skipped++; continue; }
+
+                    // نمرر null للكمية حتى لا تُعدَّل sysQty الحالية للصنف
+                    updateOrAddItem(code, name || undefined, null);
+                    imported++;
+                }
+
+                console.log(`[استيراد الصلاحية] ✅ مستورد: ${imported} | تخطي: ${skipped}`);
+                saveAllData();
+                if (currentView === 'expiry') renderExpTable();
+                else if (currentView === 'home') updateDashboardStats();
+                showToast(`✅ تم استيراد ${imported} صنف في قسم الصلاحية`);
+            } catch(err) {
+                console.error('[استيراد الصلاحية]', err);
+                showToast('خطأ في قراءة الملف: ' + err.message, 'error');
+            } finally {
+                evt.target.value = '';
+            }
+        };
+        reader.readAsArrayBuffer(file);
     }
 
     function exportExpiryData() {
         const data = [];
+
+        // جمع كل الدفعات مع بيانات الفئة الكاملة
+        const allRows = [];
         inventory.forEach(item => {
             if (!item.batches || item.batches.length === 0) {
-                 data.push({
-                    'الكود': item.code,
-                    'اسم الصنف': item.name,
-                    'تاريخ التحميص': '-',
-                    'تاريخ الانتهاء': '-',
-                    'الكمية': 0,
-                    'الحالة': 'لا توجد تواريخ'
-                });
+                allRows.push({ item, batch: null, remainingDays: Infinity });
             } else {
                 item.batches.forEach(b => {
-                    const { label, expiryDateStr } = calcExpiry(b.date, b.duration);
-                    data.push({
-                        'الكود': item.code,
-                        'اسم الصنف': item.name,
-                        'تاريخ التحميص': formatDateDisplay(b.date),
-                        'تاريخ الانتهاء': expiryDateStr,
-                        'الكمية': b.qty,
-                        'الحالة': label
-                    });
+                    const exp = b.expiryDate
+                        ? calcExpiry(b.expiryDate)
+                        : calcExpiry(b.date, b.duration);
+                    allRows.push({ item, batch: b, exp, remainingDays: exp.remainingDays ?? Infinity });
                 });
             }
         });
+
+        // ترتيب تصاعدي حسب تاريخ الانتهاء
+        allRows.sort((a, b) => a.remainingDays - b.remainingDays);
+
+        allRows.forEach(({ item, batch, exp }) => {
+            if (!batch) {
+                data.push({
+                    'الكود':          item.code,
+                    'اسم الصنف':      item.name,
+                    'تاريخ الانتهاء': '-',
+                    'الأيام المتبقية': '-',
+                    'الأشهر المتبقية': '-',
+                    'الكمية':         0,
+                    'الفئة':          'لا توجد تواريخ',
+                    'الحالة':         '-'
+                });
+                return;
+            }
+            data.push({
+                'الكود':          item.code,
+                'اسم الصنف':      item.name,
+                'تاريخ الانتهاء': exp.expiryDateStr,
+                'الأيام المتبقية': exp.remainingDays !== null ? exp.remainingDays : '-',
+                'الأشهر المتبقية': exp.remainingMonths !== null ? exp.remainingMonths : '-',
+                'الكمية':         batch.qty,
+                'الفئة':          exp.categoryLabel || '-',
+                'الحالة':         exp.label
+            });
+        });
+
         downloadExcel(data, "تقرير_تواريخ_الانتهاء_المفصل");
     }
 
@@ -2540,3 +3076,4 @@
 </script>
 </body>
 </html>
+

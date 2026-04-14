@@ -251,12 +251,22 @@ function printOrdersReport() {
     // جلب الطلبات بنفس منطق الفلترة الظاهر في الشاشة
     let list = getOrders().filter(o => o.source === activeOrdersTab);
 
+    const currentStatusFilter = document.getElementById('filter-status')?.value || 'all';
+
     if (typeof searchOrders === 'function') {
         list = searchOrders(list, document.getElementById('filter-search')?.value);
         list = filterByType(list, document.getElementById('filter-type')?.value);
-        list = filterByStatus(list, document.getElementById('filter-status')?.value);
+        list = filterByStatus(list, currentStatusFilter);
         list = filterByPriority(list, document.getElementById('filter-priority')?.value);
         list = filterByDate(list, document.getElementById('filter-date')?.value);
+    }
+
+    // استبعاد المكتملة في التقرير ما لم يُطلب صراحة بفلتر 'completed'
+    if (currentStatusFilter !== 'completed' && currentStatusFilter !== 'all') {
+        // الفلتر محدد بغير "الكل" فالبيانات مفلترة بالفعل
+    } else if (currentStatusFilter === 'all') {
+        // افتراضياً: لا تُدرج المكتملة في التقرير الرئيسي (يمكن تغيير هذا السلوك)
+        list = list.filter(o => o.status !== 'completed');
     }
 
     list.sort((a, b) => {
@@ -424,7 +434,7 @@ function printInventoryReport() {
 
 
 // ═══════════════════════════════════════════════════════════════════════
-//  تقرير تواريخ الصلاحية
+//  تقرير تواريخ الصلاحية  (مع تصنيف ذكي + ألوان + تقسيم بالفئات)
 // ═══════════════════════════════════════════════════════════════════════
 function printExpiryReport() {
     if (typeof inventory === 'undefined' || !inventory.length) {
@@ -433,86 +443,149 @@ function printExpiryReport() {
 
     const filterVal = (document.getElementById('exp-search')?.value || '').toLowerCase();
 
-    let rowIdx = 0, expiredCount = 0, warnCount = 0, okCount = 0;
-    let bodyRows = '';
+    // ── تعريف الفئات بترتيب الورود في التقرير ──
+    const CATEGORIES = [
+        { key: 'expired',  label: '⚫ منتهي الصلاحية',         bg: '#f5f5f5', fg: '#616161', headerBg: '#757575' },
+        { key: 'critical', label: '🔴 حرج  (أقل من 3 أشهر)',   bg: '#ffebee', fg: '#c62828', headerBg: '#e53935' },
+        { key: 'warning',  label: '🟠 تحذير (3 – 6 أشهر)',     bg: '#fff3e0', fg: '#e65100', headerBg: '#fb8c00' },
+        { key: 'medium',   label: '🟡 متوسط (6 أشهر – سنة)',    bg: '#fffde7', fg: '#f57f17', headerBg: '#fdd835' },
+        { key: 'safe',     label: '🟢 آمن   (أكثر من سنة)',     bg: '#e8f5e9', fg: '#1b5e20', headerBg: '#43a047' },
+        { key: 'none',     label: '⬜ بدون تاريخ انتهاء',       bg: '#fafafa', fg: '#9e9e9e', headerBg: '#bdbdbd' },
+    ];
+
+    // ── جمع الصفوف وتصنيفها ──
+    const groups = {};
+    CATEGORIES.forEach(c => groups[c.key] = []);
+
+    let totalRows = 0;
 
     inventory.forEach(item => {
-        if (filterVal && !item.name.toLowerCase().includes(filterVal)) return;
+        if (filterVal && !item.name.toLowerCase().includes(filterVal)
+                      && !item.code.toLowerCase().includes(filterVal)) return;
 
         if (!item.batches || item.batches.length === 0) {
-            rowIdx++;
-            bodyRows += `
-            <tr>
-                <td style="width:24px">${rowIdx}</td>
-                <td style="font-family:monospace;text-align:right">${item.code}</td>
-                <td style="text-align:right">${item.name}</td>
-                <td>-</td><td>-</td><td>-</td>
-                <td style="color:#aaa">لا يوجد تاريخ</td>
-            </tr>`;
-        } else {
-            item.batches.forEach(batch => {
-                rowIdx++;
-                const exp = typeof calcExpiry === 'function'
-                    ? calcExpiry(batch.date, batch.duration)
-                    : { label: '-', colorClass: '', expiryDateStr: '-', remainingDays: 999 };
-
-                let statCls = 'exp-ok';
-                if (exp.remainingDays !== undefined) {
-                    if (exp.remainingDays < 0)       { statCls = 'exp-out'; expiredCount++; }
-                    else if (exp.remainingDays <= 30) { statCls = 'exp-danger'; warnCount++; }
-                    else if (exp.remainingDays <= 90) { statCls = 'exp-warn'; warnCount++; }
-                    else                              { statCls = 'exp-ok'; okCount++; }
-                }
-
-                bodyRows += `
-                <tr>
-                    <td style="width:24px">${rowIdx}</td>
-                    <td style="font-family:monospace;text-align:right">${item.code}</td>
-                    <td style="text-align:right">${item.name}</td>
-                    <td>${typeof formatDateDisplay === 'function' ? formatDateDisplay(batch.date) : batch.date}</td>
-                    <td style="color:#c62828;font-weight:bold">${exp.expiryDateStr || '-'}</td>
-                    <td style="font-weight:bold">${batch.qty}</td>
-                    <td class="${statCls}">${exp.label || '-'}</td>
-                </tr>`;
-            });
+            groups.none.push({ item, batch: null, exp: null });
+            totalRows++;
+            return;
         }
+
+        item.batches.forEach(batch => {
+            const exp = typeof calcExpiry === 'function'
+                ? (batch.expiryDate ? calcExpiry(batch.expiryDate) : calcExpiry(batch.date, batch.duration))
+                : { label: '-', category: 'none', expiryDateStr: '-', remainingDays: null, remainingMonths: 0 };
+
+            const catKey = exp.category || 'none';
+            if (!groups[catKey]) groups[catKey] = [];
+            groups[catKey].push({ item, batch, exp });
+            totalRows++;
+        });
     });
 
-    if (!bodyRows) {
-        bodyRows = `<tr><td colspan="7" style="text-align:center;padding:16px;color:#888">لا توجد بيانات</td></tr>`;
+    // ── تصاعدي داخل كل فئة: الأقرب انتهاءً أولاً ──
+    CATEGORIES.forEach(c => {
+        groups[c.key].sort((a, b) => {
+            if (!a.exp || a.exp.remainingDays === null) return 1;
+            if (!b.exp || b.exp.remainingDays === null) return -1;
+            return a.exp.remainingDays - b.exp.remainingDays;
+        });
+    });
+
+    // ── بناء HTML الجدول مع فواصل الفئات ──
+    let rowIdx = 0;
+    let tableHtml = '';
+
+    CATEGORIES.forEach(catDef => {
+        const rows = groups[catDef.key];
+        if (!rows || rows.length === 0) return;
+
+        // ─ رأس الفئة ─
+        tableHtml += `
+        <table class="rpt-data" style="margin-bottom:12px">
+            <thead>
+                <tr>
+                    <th colspan="6"
+                        style="background:${catDef.headerBg};color:#fff;font-size:10pt;padding:6px 8px;
+                               -webkit-print-color-adjust:exact;print-color-adjust:exact;border-radius:2px">
+                        ${catDef.label} &nbsp;&mdash;&nbsp; ${rows.length} صنف / دفعة
+                    </th>
+                </tr>
+                <tr>
+                    <th style="width:22px">#</th>
+                    <th>الكود</th>
+                    <th>اسم الصنف</th>
+                    <th>تاريخ الانتهاء</th>
+                    <th>المتبقي</th>
+                    <th>الكمية</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        rows.forEach(({ item, batch, exp }) => {
+            rowIdx++;
+            if (!batch) {
+                tableHtml += `
+                <tr>
+                    <td>${rowIdx}</td>
+                    <td style="font-family:monospace;text-align:right">${item.code}</td>
+                    <td style="text-align:right">${item.name}</td>
+                    <td style="color:#aaa">-</td><td style="color:#aaa">-</td>
+                    <td style="color:#aaa">-</td>
+                </tr>`;
+                return;
+            }
+
+            const daysDisp = exp.remainingDays === null
+                ? '-'
+                : exp.remainingDays < 0
+                    ? `منتهي (${Math.abs(exp.remainingDays)} يوم)`
+                    : exp.remainingDays < 90
+                        ? `${exp.remainingDays} يوم`
+                        : `${exp.remainingMonths} شهر`;
+
+            tableHtml += `
+            <tr style="background:${catDef.bg};-webkit-print-color-adjust:exact;print-color-adjust:exact">
+                <td>${rowIdx}</td>
+                <td style="font-family:monospace;text-align:right">${item.code}</td>
+                <td style="text-align:right">${item.name}</td>
+                <td style="font-weight:bold;color:${catDef.fg}">${exp.expiryDateStr || '-'}</td>
+                <td style="font-weight:bold;color:${catDef.fg}">${daysDisp}</td>
+                <td style="font-weight:bold">${batch.qty}</td>
+            </tr>`;
+        });
+
+        tableHtml += `</tbody></table>`;
+    });
+
+    if (!tableHtml) {
+        tableHtml = `<p style="text-align:center;padding:20px;color:#888">لا توجد بيانات مطابقة</p>`;
     }
 
-    const tableHtml = `
-    <table class="rpt-data">
-        <thead>
-            <tr>
-                <th style="width:24px">#</th>
-                <th>الكود</th>
-                <th>اسم الصنف</th>
-                <th>تاريخ التحميص</th>
-                <th>تاريخ الانتهاء</th>
-                <th>الكمية</th>
-                <th>الحالة</th>
-            </tr>
-        </thead>
-        <tbody>${bodyRows}</tbody>
-    </table>`;
+    // ── ملخص ──
+    const expiredCount = groups.expired.length;
+    const criticalCount = groups.critical.length;
+    const warningCount  = groups.warning.length;
+    const mediumCount   = groups.medium.length;
+    const safeCount     = groups.safe.length;
+    const noneCount     = groups.none.length;
 
     const summaryHtml = `
     <div class="summary">
-        إجمالي الدفعات: <strong>${rowIdx}</strong> &nbsp;|&nbsp;
-        سليمة: <strong style="color:#1b5e20">${okCount}</strong> &nbsp;|&nbsp;
-        تحتاج متابعة: <strong style="color:#e65100">${warnCount}</strong> &nbsp;|&nbsp;
-        منتهية: <strong style="color:#b71c1c">${expiredCount}</strong>
+        إجمالي الدفعات: <strong>${totalRows}</strong> &nbsp;|&nbsp;
+        منتهية: <strong style="color:#757575">${expiredCount}</strong> &nbsp;|&nbsp;
+        حرج: <strong style="color:#c62828">${criticalCount}</strong> &nbsp;|&nbsp;
+        تحذير: <strong style="color:#e65100">${warningCount}</strong> &nbsp;|&nbsp;
+        متوسط: <strong style="color:#f57f17">${mediumCount}</strong> &nbsp;|&nbsp;
+        آمن: <strong style="color:#1b5e20">${safeCount}</strong> &nbsp;|&nbsp;
+        بدون تاريخ: <strong style="color:#9e9e9e">${noneCount}</strong>
     </div>`;
 
     _openPrintWindow(_buildReportHTML({
         title:      'تقرير تواريخ الصلاحية',
         orientation: 'portrait',
-        rowCount:   rowIdx,
+        rowCount:   totalRows,
         summaryHtml,
         tableHtml,
-        totalLabel: `${rowIdx} دفعة`
+        totalLabel: `${totalRows} دفعة`
     }));
 }
 
@@ -877,17 +950,36 @@ function confirmAndDeleteOrder(id) {
 /**
  * Toggles a single order between 'completed' and 'pending'.
  */
+/**
+ * تبديل حالة الطلب:
+ * pending   → in_progress
+ * in_progress → completed  (يُنقل لقسم المكتمل)
+ * completed → pending      (إعادة للانتظار)
+ */
 function toggleOrderStatus(id) {
     const list = getOrders();
     const order = list.find(o => o.id === id);
-    if(order) {
-        const newStatus = order.status === 'completed' ? 'pending' : 'completed';
-        updateOrderStatus(id, newStatus);
-        renderOrdersTable();
-        updateDashboardStats();
-        if (typeof updateDashboard === 'function') updateDashboard();
-        showToast(newStatus === 'completed' ? 'تم إنجاز الطلب' : 'تم إعادة الطلب لقائمة الانتظار');
+    if (!order) return;
+
+    let newStatus;
+    let toastMsg;
+    if (order.status === 'pending') {
+        newStatus = 'in_progress';
+        toastMsg  = 'الطلب قيد التنفيذ الآن';
+    } else if (order.status === 'in_progress') {
+        newStatus = 'completed';
+        toastMsg  = 'تم إنجاز الطلب ✓';
+    } else {
+        // completed → pending
+        newStatus = 'pending';
+        toastMsg  = 'تم إعادة الطلب لقائمة الانتظار';
     }
+
+    updateOrderStatus(id, newStatus);
+    renderOrdersTable();
+    updateDashboardStats();
+    if (typeof updateDashboard === 'function') updateDashboard();
+    showToast(toastMsg);
 }
 
 /**
@@ -956,14 +1048,18 @@ function renderOrdersTable() {
 
     // ترتيب: قيد الانتظار أولاً، ثم المكتمل، ثم حسب التاريخ أو الـ id.
     list.sort((a, b) => {
-        if (a.status === b.status) return b.id - a.id;
-        return a.status === 'completed' ? 1 : -1;
+        // ترتيب: pending → in_progress → completed → cancelled
+        const orderPriority = { pending: 0, in_progress: 1, completed: 2, cancelled: 3 };
+        const diff = (orderPriority[a.status] ?? 0) - (orderPriority[b.status] ?? 0);
+        if (diff !== 0) return diff;
+        return b.id - a.id;
     });
 
     list.forEach(order => {
-        const isCompleted = order.status === 'completed';
+        const isCompleted  = order.status === 'completed';
+        const isInProgress = order.status === 'in_progress';
         const daysDiff = calculateDaysSince(order.createdAt || order.date);
-        
+
         let rowClass = isCompleted ? "bg-slate-50 opacity-60" : "hover:bg-slate-50 transition";
         let daysClass = "font-bold text-slate-600";
         let warningIcon = "";
@@ -973,7 +1069,7 @@ function renderOrdersTable() {
             daysClass = "font-black text-red-600";
             warningIcon = `<i class="fa-solid fa-triangle-exclamation text-red-500 ml-1"></i>`;
         } else if (isCompleted) {
-             daysClass = "text-slate-400 line-through";
+            daysClass = "text-slate-400 line-through";
         }
 
         // Priority Badge
@@ -989,7 +1085,7 @@ function renderOrdersTable() {
         // Status Badge
         let statusBadge = '';
         if (order.status === 'completed') {
-            statusBadge = '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold">مكتمل</span>';
+            statusBadge = '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold">مكتمل ✓</span>';
         } else if (order.status === 'in_progress') {
             statusBadge = '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] font-bold">قيد التنفيذ</span>';
         } else if (order.status === 'cancelled') {
@@ -998,12 +1094,21 @@ function renderOrdersTable() {
             statusBadge = '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold">بانتظار التنفيذ</span>';
         }
 
+        // أيقونة زر التقدم حسب الحالة
+        let toggleIcon   = 'fa-arrow-right';
+        let toggleTitle  = 'تقدم للتالي';
+        let toggleClass  = 'bg-slate-100 text-slate-400 hover:bg-blue-50 hover:text-blue-500';
+        if (order.status === 'pending')     { toggleIcon = 'fa-play'; toggleTitle = 'بدء التنفيذ'; }
+        if (order.status === 'in_progress') { toggleIcon = 'fa-check'; toggleTitle = 'إنجاز الطلب'; toggleClass = 'bg-blue-50 text-blue-500 hover:bg-green-50 hover:text-green-600'; }
+        if (order.status === 'completed')   { toggleIcon = 'fa-check'; toggleTitle = 'منجز (أعد للانتظار)'; toggleClass = 'bg-green-100 text-green-600'; }
+
         const tr = document.createElement('tr');
         tr.className = rowClass;
         tr.innerHTML = `
             <td class="p-3 text-center">
-                <button onclick="toggleOrderStatus(${order.id})" class="w-8 h-8 rounded-full flex items-center justify-center transition ${isCompleted ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-300 hover:bg-green-50 hover:text-green-500'}">
-                    <i class="fa-solid fa-check"></i>
+                <button onclick="toggleOrderStatus(${order.id})" title="${toggleTitle}"
+                    class="w-8 h-8 rounded-full flex items-center justify-center mx-auto transition ${toggleClass}">
+                    <i class="fa-solid ${toggleIcon}"></i>
                 </button>
                 <div class="mt-1">${statusBadge}</div>
             </td>
